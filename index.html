@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Snake Game with Chasing Bot</title>
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      color: #0f0;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #info {
+      display: flex;
+      justify-content: space-between;
+      width: 700px;
+      margin: 10px 0;
+    }
+    canvas {
+      background: #111;
+      border: 2px solid #0f0;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <div id="timer">Time: 0:30</div>
+    <div id="score">Score: 0</div>
+  </div>
+  <img id="banana" src="https://upload.wikimedia.org/wikipedia/commons/8/8a/Banana-Single.jpg" style="display:none;" />
+  <canvas id="game" width="700" height="700"></canvas>
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const timerDisplay = document.getElementById("timer");
+    const scoreDisplay = document.getElementById("score");
+
+    const boxSize = 15;
+    const botSize = 10;
+    const playerSpeed = 100;
+    const botSpeed = 50;
+    let snake, dx, dy, food;
+    let botSnake, botDx = 0, botDy = 0;
+    let gameRunning = false;
+    let gameOver = false;
+    let lastSpaceTime = 0;
+    let score = 0;
+    let timeLeft = 30;
+    let timerInterval;
+    let gameOverReason = "";
+
+    function resetGame() {
+      snake = [{ x: 345, y: 345 }];
+      dx = boxSize;
+      dy = 0;
+      food = spawnFood();
+
+      botSnake = [];
+      for (let i = 0; i < botSize; i++) {
+        botSnake.push({ x: 150 - i * boxSize, y: 150 });
+      }
+
+      gameOver = false;
+      gameRunning = true;
+      score = 0;
+      timeLeft = 30;
+      gameOverReason = "";
+      updateScore();
+      updateTimerDisplay();
+      clearInterval(timerInterval);
+      timerInterval = setInterval(updateTimer, 1000);
+    }
+
+    function spawnFood() {
+      const max = canvas.width / boxSize;
+      return {
+        x: Math.floor(Math.random() * max) * boxSize,
+        y: Math.floor(Math.random() * max) * boxSize
+      };
+    }
+
+    function updateScore() {
+      scoreDisplay.textContent = `Score: ${score}`;
+    }
+
+    function updateTimerDisplay() {
+      const minutes = Math.floor(timeLeft / 60);
+      const seconds = timeLeft % 60;
+      timerDisplay.textContent = `Time: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    function updateTimer() {
+      if (!gameRunning) return;
+      timeLeft--;
+      updateTimerDisplay();
+      if (timeLeft <= 0) {
+        gameOver = true;
+        gameRunning = false;
+        gameOverReason = "time";
+        clearInterval(timerInterval);
+		draw();
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (gameOver) {
+        ctx.fillStyle = gameOverReason === "time" ? "yellow" : "red";
+        ctx.font = "bold 32px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(
+          gameOverReason === "time" ? "Time is up ⏰" : "Game Over 😢😢",
+          canvas.width / 2,
+          canvas.height / 2
+        );
+        return;
+      }
+
+      const bananaImg = document.getElementById("banana");
+      ctx.drawImage(bananaImg, food.x, food.y, boxSize, boxSize);
+
+      ctx.fillStyle = "red";
+      for (let segment of snake) {
+        ctx.fillRect(segment.x, segment.y, boxSize, boxSize);
+      }
+
+      ctx.fillStyle = "lime";
+      for (let segment of botSnake) {
+        ctx.fillRect(segment.x, segment.y, boxSize, boxSize);
+      }
+    }
+
+    function updatePlayer() {
+      const head = { ...snake[0] };
+      head.x += dx;
+      head.y += dy;
+
+      if (
+        head.x < 0 || head.x >= canvas.width ||
+        head.y < 0 || head.y >= canvas.height
+      ) {
+        gameOver = true;
+        gameRunning = false;
+        gameOverReason = "wall";
+        clearInterval(timerInterval);
+        return;
+      }
+
+      if (botSnake.some(segment => segment.x === head.x && segment.y === head.y)) {
+        gameOver = true;
+        gameRunning = false;
+        gameOverReason = "bot";
+        clearInterval(timerInterval);
+        return;
+      }
+
+      if (head.x === food.x && head.y === food.y) {
+        snake.unshift(head);
+        food = spawnFood();
+        score++;
+        updateScore();
+      } else {
+        snake.pop();
+        snake.unshift(head);
+      }
+    }
+
+    function updateBot() {
+      const botHead = { ...botSnake[0] };
+      const target = snake[0];
+
+      const dx = target.x - botHead.x;
+      const dy = target.y - botHead.y;
+
+      if (Math.abs(dx) > Math.abs(dy)) {
+        botDx = dx > 0 ? boxSize : -boxSize;
+        botDy = 0;
+      } else {
+        botDy = dy > 0 ? boxSize : -boxSize;
+        botDx = 0;
+      }
+
+      botHead.x += botDx;
+      botHead.y += botDy;
+
+      if (
+        botHead.x >= 0 && botHead.x < canvas.width &&
+        botHead.y >= 0 && botHead.y < canvas.height
+      ) {
+        botSnake.pop();
+        botSnake.unshift(botHead);
+      }
+    }
+
+    function gameLoop() {
+      if (!gameRunning || gameOver) return;
+      updatePlayer();
+      draw();
+    }
+
+    function botLoop() {
+      if (!gameRunning || gameOver) return;
+      updateBot();
+    }
+
+    document.addEventListener("keydown", (e) => {
+      const now = Date.now();
+
+      if (e.code === "Space") {
+        if (now - lastSpaceTime < 300) {
+          resetGame();
+        }
+        lastSpaceTime = now;
+      }
+
+      if (!gameRunning || gameOver) return;
+
+      switch (e.key) {
+        case "ArrowUp":
+          if (dy === 0) { dx = 0; dy = -boxSize; }
+          break;
+        case "ArrowDown":
+          if (dy === 0) { dx = 0; dy = boxSize; }
+          break;
+        case "ArrowLeft":
+          if (dx === 0) { dx = -boxSize; dy = 0; }
+          break;
+        case "ArrowRight":
+          if (dx === 0) { dx = boxSize; dy = 0; }
+          break;
+      }
+    });
+
+    setInterval(gameLoop, 1000 / (playerSpeed / boxSize));
+    setInterval(botLoop, 1000 / (botSpeed / boxSize));
+  </script>
+</body>
+</html>
